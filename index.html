@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>麻將糊了 Mahjong Ways</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #1a0a00;
+    font-family: 'Arial', sans-serif;
+    display: flex; justify-content: center; align-items: center;
+    min-height: 100vh;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  #game-container {
+    width: 100%;
+    max-width: 480px;
+    min-height: 100vh;
+    background: linear-gradient(180deg, #2d0a00 0%, #1a0500 40%, #0d0200 100%);
+    display: flex; flex-direction: column; align-items: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Header */
+  #header {
+    width: 100%; padding: 12px 16px 8px;
+    text-align: center;
+    background: linear-gradient(180deg, #4a0e00 0%, transparent 100%);
+  }
+  #title {
+    font-size: 28px; font-weight: 900;
+    background: linear-gradient(135deg, #FFD700, #FF8C00, #FFD700);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    letter-spacing: 4px; text-shadow: none;
+    font-family: 'SimHei', 'Arial', sans-serif;
+  }
+  #subtitle { color: #ff9933; font-size: 11px; letter-spacing: 6px; margin-top: 2px; }
+
+  /* Multiplier bar */
+  #multiplier-bar {
+    width: 90%; margin: 6px auto;
+    display: flex; justify-content: center; align-items: center;
+    gap: 8px;
+  }
+  .mult-step {
+    background: rgba(255,180,0,0.15);
+    border: 1px solid rgba(255,180,0,0.3);
+    border-radius: 4px; padding: 3px 10px;
+    color: #cc8800; font-size: 13px; font-weight: bold;
+    transition: all 0.3s;
+  }
+  .mult-step.active {
+    background: linear-gradient(135deg, #FFD700, #FF6B00);
+    border-color: #FFD700;
+    color: #000;
+    box-shadow: 0 0 10px rgba(255,200,0,0.6);
+    transform: scale(1.1);
+  }
+
+  /* Reels */
+  #reels-wrapper {
+    width: 92%; margin: 6px auto;
+    background: rgba(0,0,0,0.6);
+    border: 2px solid #8B4513;
+    border-radius: 8px;
+    padding: 4px;
+    position: relative;
+    box-shadow: inset 0 0 20px rgba(0,0,0,0.8), 0 0 15px rgba(139,69,19,0.5);
+  }
+  #reels {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    grid-template-rows: repeat(4, 1fr);
+    gap: 3px;
+    aspect-ratio: 5/4;
+  }
+  .cell {
+    background: linear-gradient(135deg, #2a1500, #1a0a00);
+    border: 1px solid #3d2010;
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column;
+    font-size: 11px;
+    cursor: default;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.1s;
+  }
+  .cell.winning {
+    animation: winPulse 0.4s ease-in-out infinite alternate;
+  }
+  .cell.exploding {
+    animation: explode 0.3s ease-out forwards;
+  }
+  @keyframes winPulse {
+    from { box-shadow: 0 0 5px rgba(255,220,0,0.5); border-color: #FFD700; }
+    to   { box-shadow: 0 0 15px rgba(255,220,0,0.9); border-color: #FFD700; background: rgba(255,200,0,0.15); }
+  }
+  @keyframes explode {
+    0%   { transform: scale(1); opacity: 1; }
+    50%  { transform: scale(1.3); opacity: 0.5; }
+    100% { transform: scale(0); opacity: 0; }
+  }
+  @keyframes dropIn {
+    from { transform: translateY(-60px); opacity: 0; }
+    to   { transform: translateY(0); opacity: 1; }
+  }
+  .cell.dropping { animation: dropIn 0.3s ease-out forwards; }
+
+  .symbol-icon { font-size: 26px; line-height: 1; }
+  .symbol-label { font-size: 9px; margin-top: 1px; }
+
+  /* Symbols */
+  .sym-scatter .symbol-icon::after { content: '🀄'; }
+  .sym-wild    .symbol-icon::after { content: '🌟'; }
+  .sym-dong    .symbol-icon { font-size: 22px; font-weight: 900; color: #FFD700; }
+  .sym-fa      .symbol-icon { font-size: 22px; font-weight: 900; color: #00DD44; }
+  .sym-zhong   .symbol-icon { font-size: 22px; font-weight: 900; color: #FF2244; }
+  .sym-bai     .symbol-icon { font-size: 22px; font-weight: 900; color: #CCCCCC; }
+  .sym-w3      .symbol-icon { font-size: 22px; font-weight: 900; color: #4499FF; }
+  .sym-b3      .symbol-icon { font-size: 22px; font-weight: 900; color: #22CCBB; }
+  .sym-z3      .symbol-icon { font-size: 22px; font-weight: 900; color: #BB77FF; }
+  .sym-w1      .symbol-icon { font-size: 22px; font-weight: 900; color: #888; }
+
+  .sym-dong    .symbol-bg, .sym-fa .symbol-bg, .sym-zhong .symbol-bg,
+  .sym-bai .symbol-bg, .sym-w3 .symbol-bg, .sym-b3 .symbol-bg,
+  .sym-z3 .symbol-bg, .sym-w1 .symbol-bg {
+    position: absolute; inset: 2px;
+    background: linear-gradient(135deg, #1a0a00, #3d1a00);
+    border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column;
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+  .sym-scatter .symbol-bg, .sym-wild .symbol-bg {
+    position: absolute; inset: 2px; border-radius: 4px;
+    display: flex; align-items: center; justify-content: center; flex-direction: column;
+  }
+  .sym-scatter .symbol-bg { background: linear-gradient(135deg, #4a0000, #800020); border: 1px solid #FF4444; }
+  .sym-wild    .symbol-bg { background: linear-gradient(135deg, #3a3000, #7a6000); border: 1px solid #FFD700; }
+
+  .tile-char {
+    font-family: 'SimHei','Microsoft YaHei','Arial',sans-serif;
+    font-weight: 900;
+    line-height: 1;
+  }
+  .tile-sub {
+    font-family: 'SimHei','Microsoft YaHei','Arial',sans-serif;
+    font-size: 8px;
+    line-height: 1;
+    margin-top: 1px;
+  }
+
+  /* Win line overlay */
+  #win-overlay {
+    position: absolute; inset: 4px;
+    pointer-events: none;
+    display: none;
+  }
+
+  /* Info bar */
+  #info-bar {
+    width: 92%; margin: 6px auto;
+    display: flex; gap: 6px;
+  }
+  .info-box {
+    flex: 1; background: rgba(0,0,0,0.5);
+    border: 1px solid #5c2800; border-radius: 6px;
+    padding: 6px; text-align: center;
+  }
+  .info-label { color: #996633; font-size: 9px; text-transform: uppercase; letter-spacing: 1px; }
+  .info-value { color: #FFD700; font-size: 16px; font-weight: bold; margin-top: 2px; }
+
+  /* Win display */
+  #win-display {
+    color: #00FF88; font-size: 22px; font-weight: 900;
+    text-align: center; min-height: 28px; margin: 2px 0;
+    text-shadow: 0 0 10px rgba(0,255,100,0.7);
+    transition: all 0.3s;
+  }
+
+  /* Free spins indicator */
+  #free-spins-bar {
+    width: 92%; margin: 2px auto;
+    background: linear-gradient(135deg, #4a0000, #800020);
+    border: 1px solid #FF4444; border-radius: 6px;
+    padding: 5px 10px; text-align: center;
+    display: none;
+    animation: freePulse 1s ease-in-out infinite alternate;
+  }
+  @keyframes freePulse {
+    from { box-shadow: 0 0 5px rgba(255,68,68,0.5); }
+    to   { box-shadow: 0 0 15px rgba(255,68,68,0.9); }
+  }
+  #free-spins-bar span { color: #FFD700; font-weight: bold; font-size: 14px; }
+
+  /* Controls */
+  #controls {
+    width: 92%; margin: 8px auto;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .bet-btn {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: linear-gradient(135deg, #5c2800, #3d1800);
+    border: 1px solid #8B4513; color: #FFD700;
+    font-size: 18px; font-weight: bold; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+  .bet-btn:active { transform: scale(0.92); }
+  #bet-display {
+    flex: 1; text-align: center;
+    background: rgba(0,0,0,0.4); border: 1px solid #5c2800;
+    border-radius: 6px; padding: 4px 0;
+  }
+  #bet-display .info-label { font-size: 8px; color: #996633; }
+  #bet-display .info-value { font-size: 14px; color: #FFD700; }
+  #spin-btn {
+    width: 72px; height: 72px; border-radius: 50%;
+    background: radial-gradient(circle, #FF8C00, #CC4400);
+    border: 3px solid #FFD700;
+    color: #fff; font-size: 14px; font-weight: 900;
+    cursor: pointer; letter-spacing: 1px;
+    box-shadow: 0 4px 15px rgba(255,140,0,0.5);
+    transition: all 0.15s;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  #spin-btn:active:not(:disabled) { transform: scale(0.93); box-shadow: 0 2px 8px rgba(255,140,0,0.4); }
+  #spin-btn:disabled { background: radial-gradient(circle, #555, #333); border-color: #666; cursor: not-allowed; }
+  #spin-btn .spin-label { font-size: 16px; }
+  #spin-btn .spin-sub   { font-size: 9px; opacity: 0.8; }
+
+  /* Message */
+  #message {
+    color: #cc9900; font-size: 12px; text-align: center;
+    min-height: 18px; margin: 2px 0;
+  }
+
+  /* Big win overlay */
+  #bigwin-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.8);
+    display: none; align-items: center; justify-content: center;
+    flex-direction: column; z-index: 100;
+  }
+  #bigwin-overlay.show { display: flex; }
+  #bigwin-text {
+    font-size: 48px; font-weight: 900;
+    background: linear-gradient(135deg, #FFD700, #FF6B00, #FFD700);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    animation: bigWinAnim 0.5s ease-out;
+    text-align: center;
+  }
+  #bigwin-amount {
+    font-size: 36px; color: #00FF88; font-weight: 900;
+    margin-top: 10px; text-shadow: 0 0 20px rgba(0,255,136,0.8);
+  }
+  @keyframes bigWinAnim {
+    from { transform: scale(0.2); opacity: 0; }
+    to   { transform: scale(1); opacity: 1; }
+  }
+</style>
+</head>
+<body>
+<div id="game-container">
+  <div id="header">
+    <div id="title">麻將糊了</div>
+    <div id="subtitle">MAHJONG WAYS</div>
+  </div>
+
+  <!-- Multiplier steps -->
+  <div id="multiplier-bar">
+    <div class="mult-step active" id="m1">×1</div>
+    <div class="mult-step" id="m2">×2</div>
+    <div class="mult-step" id="m3">×3</div>
+    <div class="mult-step" id="m5">×5</div>
+    <div class="mult-step" id="m8">×8</div>
+    <div class="mult-step" id="m15">×15</div>
+  </div>
+
+  <!-- Reels -->
+  <div id="reels-wrapper">
+    <div id="reels"></div>
+  </div>
+
+  <!-- Free Spins -->
+  <div id="free-spins-bar">
+    🎴 FREE SPINS <span id="fs-count">12</span> 轉剩餘
+  </div>
+
+  <!-- Win display -->
+  <div id="win-display"></div>
+
+  <!-- Info boxes -->
+  <div id="info-bar">
+    <div class="info-box">
+      <div class="info-label">餘額</div>
+      <div class="info-value" id="balance-val">1000</div>
+    </div>
+    <div class="info-box">
+      <div class="info-label">連贏</div>
+      <div class="info-value" id="cascade-val">0</div>
+    </div>
+    <div class="info-box">
+      <div class="info-label">本轉贏得</div>
+      <div class="info-value" id="roundwin-val">0</div>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div id="controls">
+    <button class="bet-btn" id="bet-down">−</button>
+    <div id="bet-display">
+      <div class="info-label">押注</div>
+      <div class="info-value" id="bet-val">10</div>
+    </div>
+    <button id="spin-btn" onclick="spin()">
+      <div class="spin-label">旋轉</div>
+      <div class="spin-sub">SPIN</div>
+    </button>
+    <div id="bet-display" style="flex:1">
+      <div class="info-label">倍率</div>
+      <div class="info-value" id="mult-val">×1</div>
+    </div>
+    <button class="bet-btn" id="bet-up">+</button>
+  </div>
+
+  <div id="message">選擇押注金額，點擊旋轉開始！</div>
+</div>
+
+<!-- Big win overlay -->
+<div id="bigwin-overlay">
+  <div id="bigwin-text">BIG WIN!</div>
+  <div id="bigwin-amount"></div>
+</div>
+
+<script>
+// ─── Symbol Definitions ─────────────────────────────────────────────────────
+const SYMBOLS = [
+  { id: 'scatter', label: '糊', sub: 'SCATTER', color: '#FF4444', bg: '#4a0000', border: '#FF4444',
+    pays: [0,0,0,0,0], scatter: true },
+  { id: 'wild',    label: '麻', sub: 'WILD',    color: '#FFD700', bg: '#3a3000', border: '#FFD700',
+    pays: [0,0,0,0,0], wild: true },
+  { id: 'dong',    label: '東', sub: 'EAST',    color: '#FFD700', bg: '#2a1500', border: '#886600',
+    pays: [0,0,0,50,100,200] },
+  { id: 'fa',      label: '發', sub: 'GREEN',   color: '#00DD44', bg: '#001500', border: '#006622',
+    pays: [0,0,0,30, 60,120] },
+  { id: 'zhong',   label: '中', sub: 'RED',     color: '#FF2244', bg: '#1a0000', border: '#660011',
+    pays: [0,0,0,20, 40, 80] },
+  { id: 'bai',     label: '白', sub: 'WHITE',   color: '#DDDDDD', bg: '#111111', border: '#555555',
+    pays: [0,0,0,15, 30, 60] },
+  { id: 'w3',      label: '三萬',sub: '3WAN',   color: '#4499FF', bg: '#001030', border: '#224488',
+    pays: [0,0,0,10, 20, 40] },
+  { id: 'b3',      label: '三筒',sub: '3TONG',  color: '#22CCBB', bg: '#001515', border: '#116655',
+    pays: [0,0,0, 8, 15, 30] },
+  { id: 'z3',      label: '三條',sub: '3TIAO',  color: '#BB77FF', bg: '#150030', border: '#553388',
+    pays: [0,0,0, 5, 10, 20] },
+  { id: 'w1',      label: '一萬',sub: '1WAN',   color: '#888888', bg: '#111111', border: '#444444',
+    pays: [0,0,0, 3,  6, 12] },
+];
+
+// Symbol weights for random generation
+const WEIGHTS = [
+  { id: 'scatter', w: 2 },
+  { id: 'wild',    w: 4 },
+  { id: 'dong',    w: 6 },
+  { id: 'fa',      w: 8 },
+  { id: 'zhong',   w: 10 },
+  { id: 'bai',     w: 12 },
+  { id: 'w3',      w: 16 },
+  { id: 'b3',      w: 18 },
+  { id: 'z3',      w: 20 },
+  { id: 'w1',      w: 24 },
+];
+const TOTAL_WEIGHT = WEIGHTS.reduce((s, w) => s + w.w, 0);
+
+const COLS = 5, ROWS = 4;
+const MULT_STEPS = [1, 2, 3, 5, 8, 15];
+
+// ─── Game State ─────────────────────────────────────────────────────────────
+let balance = 1000;
+let bet = 10;
+let grid = [];
+let multiplierIdx = 0;
+let cascadeCount = 0;
+let roundWin = 0;
+let freeSpins = 0;
+let isFreeSpins = false;
+let spinning = false;
+
+const BETS = [1, 2, 5, 10, 20, 50, 100];
+let betIdx = 3;
+
+// ─── DOM Helpers ─────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+function getSym(id) { return SYMBOLS.find(s => s.id === id); }
+
+function randomSymbol(noScatter = false) {
+  let weights = WEIGHTS;
+  if (noScatter) weights = weights.filter(w => w.id !== 'scatter');
+  const total = weights.reduce((s, w) => s + w.w, 0);
+  let r = Math.random() * total;
+  for (const w of weights) {
+    r -= w.w;
+    if (r <= 0) return w.id;
+  }
+  return weights[weights.length-1].id;
+}
+
+// ─── Render ──────────────────────────────────────────────────────────────────
+function renderGrid() {
+  const reels = $('reels');
+  reels.innerHTML = '';
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const symId = grid[r][c];
+      const sym = getSym(symId);
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.id = `cell-${r}-${c}`;
+      cell.innerHTML = `
+        <div class="symbol-bg" style="
+          position:absolute;inset:2px;border-radius:4px;
+          background:linear-gradient(135deg,${sym.bg},#0a0500);
+          border:1px solid ${sym.border};
+          display:flex;align-items:center;justify-content:center;flex-direction:column;
+        ">
+          <div class="tile-char" style="font-size:${sym.id.length>2?'18px':'22px'};color:${sym.color};font-weight:900;line-height:1;">${sym.label}</div>
+          <div class="tile-sub" style="color:${sym.color};opacity:0.7;">${sym.sub}</div>
+        </div>`;
+      reels.appendChild(cell);
+    }
+  }
+  updateUI();
+}
+
+function updateUI() {
+  $('balance-val').textContent = balance;
+  $('bet-val').textContent = BETS[betIdx];
+  $('cascade-val').textContent = cascadeCount;
+  $('roundwin-val').textContent = roundWin;
+  const mult = MULT_STEPS[Math.min(multiplierIdx, MULT_STEPS.length-1)];
+  $('mult-val').textContent = '×' + mult;
+  // Update multiplier bar
+  MULT_STEPS.forEach((m, i) => {
+    const el = document.getElementById('m' + m);
+    if (el) el.classList.toggle('active', i === multiplierIdx);
+  });
+}
+
+// ─── Win Detection ───────────────────────────────────────────────────────────
+function findWins() {
+  const wins = []; // { positions: [[r,c]...], symId, count }
+
+  // For each column combo, find leftmost matching runs
+  // Ways to win: count matching (or wild) symbols starting from col 0
+  // We use "ways" system: for each combination of symbol positions across reels
+  // Simplified: for each symbol type, check how many consecutive reels have it
+
+  // Get available symbols per column (can be wild)
+  function getColSymbols(col) {
+    const syms = [];
+    for (let r = 0; r < ROWS; r++) syms.push(grid[r][col]);
+    return syms;
+  }
+
+  // For each non-wild, non-scatter symbol, find ways
+  const symIds = SYMBOLS.filter(s => !s.scatter && !s.wild).map(s => s.id);
+
+  for (const symId of symIds) {
+    // Count consecutive reels from left that have this symbol (or wild)
+    let reelCount = 0;
+    const reelPositions = []; // positions per reel
+
+    for (let c = 0; c < COLS; c++) {
+      const colSyms = getColSymbols(c);
+      const positions = [];
+      for (let r = 0; r < ROWS; r++) {
+        if (colSyms[r] === symId || colSyms[r] === 'wild') {
+          positions.push([r, c]);
+        }
+      }
+      if (positions.length > 0) {
+        reelCount++;
+        reelPositions.push(positions);
+      } else break;
+    }
+
+    if (reelCount >= 3) {
+      // Calculate number of ways = product of symbol counts per reel
+      // For visual highlighting, collect one path
+      let ways = 1;
+      for (const rp of reelPositions) ways *= rp.length;
+
+      const allPositions = reelPositions.flat();
+      wins.push({ symId, count: reelCount, ways, positions: allPositions });
+    }
+  }
+
+  // Check scatter (anywhere on grid)
+  const scatterPos = [];
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      if (grid[r][c] === 'scatter') scatterPos.push([r, c]);
+  if (scatterPos.length >= 3) wins.push({ symId: 'scatter', count: scatterPos.length, ways: 1, positions: scatterPos });
+
+  return wins;
+}
+
+function calcWinAmount(wins, mult) {
+  let total = 0;
+  const b = BETS[betIdx];
+  for (const w of wins) {
+    if (w.symId === 'scatter') {
+      // Scatter pays
+      if (w.count === 3) total += b * 2;
+      else if (w.count === 4) total += b * 10;
+      else if (w.count >= 5) total += b * 50;
+    } else {
+      const sym = getSym(w.symId);
+      const basePay = sym.pays[Math.min(w.count, 5)];
+      total += basePay * b * w.ways * 0.1 * mult;
+    }
+  }
+  return Math.round(total);
+}
+
+// ─── Cascade Logic ───────────────────────────────────────────────────────────
+async function cascade(wins) {
+  // Mark winning cells
+  const winSet = new Set();
+  for (const w of wins) {
+    for (const [r, c] of w.positions) {
+      if (grid[r][c] !== 'wild' || w.symId === 'scatter') {
+        winSet.add(`${r}-${c}`);
+      }
+    }
+  }
+
+  // Highlight winning cells
+  winSet.forEach(key => {
+    const [r, c] = key.split('-').map(Number);
+    const cell = $(`cell-${r}-${c}`);
+    if (cell) cell.classList.add('winning');
+  });
+
+  await sleep(500);
+
+  // Explode winning cells
+  winSet.forEach(key => {
+    const [r, c] = key.split('-').map(Number);
+    const cell = $(`cell-${r}-${c}`);
+    if (cell) { cell.classList.remove('winning'); cell.classList.add('exploding'); }
+  });
+
+  await sleep(300);
+
+  // Remove winning symbols and drop remaining down
+  // Convert winSet to column operations
+  for (let c = 0; c < COLS; c++) {
+    let remaining = [];
+    for (let r = 0; r < ROWS; r++) {
+      if (!winSet.has(`${r}-${c}`)) remaining.push(grid[r][c]);
+    }
+    // Fill from top with new symbols
+    const newSyms = [];
+    const needed = ROWS - remaining.length;
+    for (let i = 0; i < needed; i++) newSyms.push(randomSymbol(true));
+    grid = grid; // will update below
+    const newCol = [...newSyms, ...remaining];
+    for (let r = 0; r < ROWS; r++) grid[r][c] = newCol[r];
+  }
+
+  renderGrid();
+  // Add drop animation
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++) {
+      const cell = $(`cell-${r}-${c}`);
+      if (cell) cell.classList.add('dropping');
+    }
+
+  await sleep(350);
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++) {
+      const cell = $(`cell-${r}-${c}`);
+      if (cell) cell.classList.remove('dropping');
+    }
+}
+
+// ─── Main Spin Logic ─────────────────────────────────────────────────────────
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function spin() {
+  if (spinning) return;
+
+  const b = BETS[betIdx];
+  if (!isFreeSpins && balance < b) {
+    $('message').textContent = '餘額不足！';
+    return;
+  }
+
+  spinning = true;
+  $('spin-btn').disabled = true;
+  $('win-display').textContent = '';
+  $('message').textContent = '';
+
+  if (!isFreeSpins) {
+    balance -= b;
+  }
+
+  // Reset cascade state for new spin
+  multiplierIdx = 0;
+  cascadeCount = 0;
+  roundWin = 0;
+  updateUI();
+
+  // Generate initial grid
+  grid = [];
+  for (let r = 0; r < ROWS; r++) {
+    grid[r] = [];
+    for (let c = 0; c < COLS; c++) grid[r][c] = randomSymbol();
+  }
+
+  // Animate spin (quick flash)
+  for (let i = 0; i < 3; i++) {
+    for (let r = 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++) grid[r][c] = randomSymbol();
+    renderGrid();
+    await sleep(80);
+  }
+
+  // Final grid
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++) grid[r][c] = randomSymbol();
+  renderGrid();
+  await sleep(200);
+
+  // Cascade loop
+  let hasWin = true;
+  while (hasWin) {
+    const wins = findWins();
+    if (wins.length === 0) { hasWin = false; break; }
+
+    const mult = MULT_STEPS[Math.min(multiplierIdx, MULT_STEPS.length-1)];
+    const winAmt = calcWinAmount(wins, mult);
+
+    // Check scatter
+    const scatterWin = wins.find(w => w.symId === 'scatter');
+    if (scatterWin) {
+      const fs = scatterWin.count >= 5 ? 20 : scatterWin.count === 4 ? 15 : 12;
+      if (!isFreeSpins) {
+        freeSpins += fs;
+        $('message').textContent = `🎴 觸發 FREE SPINS! 獲得 ${fs} 轉!`;
+      } else {
+        freeSpins += fs;
+        $('message').textContent = `🎴 追加 ${fs} 轉!`;
+      }
+    }
+
+    roundWin += winAmt;
+    balance += winAmt;
+    cascadeCount++;
+
+    const winNames = wins.filter(w => !w.scatter).map(w => getSym(w.symId)?.label).join(', ');
+    $('win-display').textContent = `+${winAmt} (×${mult})`;
+    updateUI();
+
+    await cascade(wins);
+
+    // Increase multiplier for next cascade
+    if (multiplierIdx < MULT_STEPS.length - 1) multiplierIdx++;
+    updateUI();
+
+    await sleep(100);
+  }
+
+  // Summary
+  if (roundWin > 0) {
+    const b2 = BETS[betIdx];
+    const ratio = roundWin / b2;
+    if (ratio >= 50) {
+      showBigWin(roundWin, ratio >= 100 ? 'MEGA WIN!!' : ratio >= 50 ? 'BIG WIN!' : 'WIN!');
+    } else {
+      $('win-display').textContent = roundWin > 0 ? `本轉贏得: ${roundWin}` : '';
+    }
+  } else {
+    $('win-display').textContent = '';
+    $('message').textContent = '再試一次！';
+  }
+
+  // Handle free spins
+  if (freeSpins > 0 && !isFreeSpins) {
+    isFreeSpins = true;
+    $('free-spins-bar').style.display = 'block';
+    $('fs-count').textContent = freeSpins;
+    $('message').textContent = `FREE SPINS 開始！剩餘 ${freeSpins} 轉`;
+    spinning = false;
+    $('spin-btn').disabled = false;
+  } else if (isFreeSpins) {
+    freeSpins--;
+    $('fs-count').textContent = freeSpins;
+    if (freeSpins <= 0) {
+      isFreeSpins = false;
+      $('free-spins-bar').style.display = 'none';
+      $('message').textContent = 'FREE SPINS 結束！';
+    }
+    spinning = false;
+    $('spin-btn').disabled = false;
+  } else {
+    spinning = false;
+    $('spin-btn').disabled = false;
+  }
+
+  updateUI();
+}
+
+function showBigWin(amount, label) {
+  const ov = $('bigwin-overlay');
+  $('bigwin-text').textContent = label;
+  $('bigwin-amount').textContent = '+' + amount;
+  ov.classList.add('show');
+  setTimeout(() => ov.classList.remove('show'), 2500);
+}
+
+// ─── Bet Controls ────────────────────────────────────────────────────────────
+$('bet-down').onclick = () => {
+  if (spinning) return;
+  if (betIdx > 0) { betIdx--; updateUI(); }
+};
+$('bet-up').onclick = () => {
+  if (spinning) return;
+  if (betIdx < BETS.length-1) { betIdx++; updateUI(); }
+};
+
+$('bigwin-overlay').onclick = () => $('bigwin-overlay').classList.remove('show');
+
+// ─── Init ────────────────────────────────────────────────────────────────────
+function init() {
+  grid = [];
+  for (let r = 0; r < ROWS; r++) {
+    grid[r] = [];
+    for (let c = 0; c < COLS; c++) grid[r][c] = randomSymbol();
+  }
+  renderGrid();
+}
+
+init();
+</script>
+</body>
+</html>
